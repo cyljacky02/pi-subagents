@@ -64,6 +64,7 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { runInChildSessionContext } from "./child-context.js";
+import { createChildModelRuntime } from "./child-model-runtime.js";
 import { agentMentionReminder } from "./mention.js";
 import type { SubagentType } from "./types.js";
 
@@ -128,10 +129,8 @@ export async function runMentionClone(opts: MentionCloneOptions): Promise<Mentio
 
   let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
   try {
-    // Pi 0.80.8 moved createAgentSession from modelRegistry to modelRuntime;
-    // agent-runner.ts carries the same shim for the same reason — pass both so
-    // the clone keeps the parent's providers across the supported range.
-    const parentModelRuntime = (ctx.modelRegistry as unknown as { runtime?: unknown }).runtime;
+    const agentDir = getAgentDir();
+    const modelRuntime = await createChildModelRuntime(ctx.modelRegistry, agentDir);
     // Absent when the session has no level of its own; the clone then takes the
     // settings level, which is what a session that never ran `/think` is on.
     const thinkingLevel = ctx.thinkingLevel;
@@ -142,7 +141,7 @@ export async function runMentionClone(opts: MentionCloneOptions): Promise<Mentio
     const systemPrompt = ctx.getSystemPrompt();
     const loader = new DefaultResourceLoader({
       cwd: ctx.cwd,
-      agentDir: getAgentDir(),
+      agentDir,
       noExtensions: true,
       noSkills: true,
       noPromptTemplates: true,
@@ -155,6 +154,7 @@ export async function runMentionClone(opts: MentionCloneOptions): Promise<Mentio
     const created = await runInChildSessionContext(() =>
       createAgentSession({
         cwd: ctx.cwd,
+        agentDir,
         // The parent's root-to-leaf path, which the clone projects itself:
         // compaction applied, branch summaries substituted. Not `getEntries()`,
         // whose last entry is not the leaf after `/tree` navigation. In memory,
@@ -164,8 +164,7 @@ export async function runMentionClone(opts: MentionCloneOptions): Promise<Mentio
         resourceLoader: loader,
         model: ctx.model as Model<never> | undefined,
         ...(thinkingLevel && { thinkingLevel }),
-        modelRegistry: ctx.modelRegistry,
-        ...(parentModelRuntime !== undefined && { modelRuntime: parentModelRuntime as never }),
+        modelRuntime,
         // An allowlist naming exactly the clone's own tool. NOT `noTools:
         // "all"`, whose doc comment ("start with no tools enabled") reads like
         // it spares custom tools and does not: it resolves to an EMPTY

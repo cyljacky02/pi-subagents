@@ -465,6 +465,14 @@ A few rules the examples don't make obvious:
 - `exclude_extensions:` is **not a sandbox**: excluded extensions' factory code still executes once during loading. Exclusion suppresses their tools and their bound lifecycle hooks (`pi.on` handlers like `session_start` only fire for extensions bound to the session), but not other load-time side effects — a factory that subscribes directly to the shared `pi.events` bus stays live. Don't rely on it to contain an untrusted extension.
 - Array and string forms are equivalent: `[a, b]` == `"a, b"`.
 
+### Model provider inheritance
+
+Every child session, including an isolated agent or an off-screen mention clone, owns its own model runtime and provider registrations. Children inherit declarative provider definitions at spawn time, then their loaded extensions can replace, refresh, or unregister those definitions locally. A child's shutdown, record eviction, or reload cannot unregister the parent's or a sibling's provider.
+
+Children reuse the parent's underlying credential source and `models.json` location, preserving model overrides and coordinated OAuth refresh; their runtime-key overlays remain independent. Explicit runtime API-key overrides are copied as raw credentials at spawn time, before a provider transforms them into request auth. Resolved OAuth tokens and credential-command output are not turned into static overrides. Virtual-model routing definitions are inherited, with router state kept on each child's own conversation branch. Later parent-only registrations and runtime-key changes apply to newly spawned children, not existing ones.
+
+Native providers inherited without loading their extension get a catalog snapshot plus their auth and request implementations, not their parent-owned mutable catalog refresh callback. Load the provider extension in the child when it needs its own discovery lifecycle. Pi has no complete runtime-fork interface: the helper confines the necessary read-only SDK compatibility access to one place (verified against Pi 1.1 and 1.5), and reports unavailable runtime credentials or routers rather than silently dropping them. State captured inside third-party callbacks is not cloned.
+
 **How an agent's scope is advertised.** The Agent tool description lists every available agent with a `(Tools: …)` suffix, and that suffix is what the orchestrator reads when deciding where to route work. It describes **built-in scope only** — extension tools are resolved when the agent runs (extensions may register lazily, see above), so they can't be enumerated when the description is built:
 
 | `tools:` | suffix |
@@ -1087,6 +1095,7 @@ src/
   agent-manager.ts    # Agent lifecycle, concurrency queue, completion notifications
   nested-tools.ts     # Delegation tools handed to subagents (nested spawn/collect/steer)
   child-context.ts    # AsyncLocalStorage flag marking work done for a child session
+  child-model-runtime.ts # Independent child provider registrations and inherited configuration
   abortable.ts        # Race a wait against Esc without cancelling the background child
   completion-outbox.ts # Deliver completion notifications at the parent's next boundary, coalesced
   group-join.ts       # `group` join mode: one notification per turn's batch, with timeout
