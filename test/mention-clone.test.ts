@@ -28,6 +28,7 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
   return {
     ...actual,
     createAgentSession,
+    ModelRuntime: { create: async () => ({ getModel: vi.fn(), refresh: async () => ({ aborted: false, errors: new Map() }) }) },
     // Records its options; a real one would read the user's agent dir.
     DefaultResourceLoader: class {
       reload = vi.fn(async () => {});
@@ -222,15 +223,18 @@ describe("cloning the conversation", () => {
     expect(loaders[0].options.appendSystemPromptOverride(["addendum"])).toEqual([]);
   });
 
-  it("inherits the parent's model, thinking level and providers", async () => {
+  it("inherits the parent's model and thinking level without sharing its runtime", async () => {
     cloneSession(callsAgent());
+    const options = opts();
 
-    await runMentionClone(opts());
+    await runMentionClone(options);
 
     const built = createAgentSession.mock.calls[0][0];
     expect(built.model).toEqual({ id: "main-model" });
     expect(built.thinkingLevel).toBe("high");
-    expect(built.modelRuntime).toEqual({ kind: "runtime" });
+    expect(built.modelRuntime).not.toBe(options.ctx.modelRegistry.runtime);
+    expect(built.modelRuntime.getModel).toBeTypeOf("function");
+    expect(built).not.toHaveProperty("modelRegistry");
   });
 
   it("gives the clone the Agent tool and nothing else", async () => {

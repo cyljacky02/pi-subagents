@@ -23,8 +23,21 @@ export function fauxModelBackend(model: Model<string>): {
   modelRegistry: any;
   modelRuntime: any;
 } {
+  const registration = {
+    api: model.api,
+    baseUrl: model.baseUrl,
+    apiKey: "faux",
+    models: [model],
+    streamSimple,
+  };
+  const providerRegistrations = {
+    getRegisteredProviderIds: () => [model.provider],
+    getRegisteredProviderConfig: () => registration,
+    getRegisteredNativeProvider: () => undefined,
+  };
   return {
     modelRegistry: {
+      ...providerRegistrations,
       find: () => model,
       getAll: () => [model],
       getAvailable: () => [model],
@@ -38,6 +51,7 @@ export function fauxModelBackend(model: Model<string>): {
       unregisterProvider: () => {},
     },
     modelRuntime: {
+      ...providerRegistrations,
       getModel: () => model,
       getModels: () => [model],
       getProvider: () => undefined,
@@ -54,9 +68,6 @@ export function fauxModelBackend(model: Model<string>): {
       getAuth: async () => ({ auth: { apiKey: "faux", headers: {} } }),
       getProviderAuthStatus: () => "configured",
       getCompatibilityRequestConfig: () => ({}),
-      getRegisteredProviderIds: () => [],
-      getRegisteredProviderConfig: () => undefined,
-      getRegisteredNativeProvider: () => undefined,
       registerProvider: () => {},
       registerNativeProvider: () => {},
       unregisterProvider: () => {},
